@@ -1219,32 +1219,37 @@ function openBot(id){
 async function checkServerStatus(botId) {
   const cfg = getServerCfg(botId);
   if (!cfg.url || !cfg.key) return;
+  const btn = document.getElementById('btn-run');
+  if (btn) { btn.textContent='⏳ Checking server...'; btn.disabled=true; }
   try {
+    // Longer timeout to account for Render free tier wakeup (up to 50 seconds)
     const res = await fetch(cfg.url+'/api/status/'+botId, {
       headers:{'x-server-key':cfg.key},
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(15000)
     });
     const data = await res.json();
     if (data.running) {
-      // Bot is already running on server — update UI
-      const btn = document.getElementById('btn-run');
-      const status = document.getElementById('bot-status');
-      const logPanel = document.getElementById('log-panel');
       if (btn) {
         btn.dataset.serverRunning='1';
         btn.textContent='⏹ Stop (Server)';
         btn.style.cssText='background:rgba(129,140,248,.15);color:#818CF8;border:1px solid rgba(129,140,248,.35);min-width:110px';
+        btn.disabled=false;
       }
+      const status = document.getElementById('bot-status');
       if (status) {
         status.style.display='flex';
         status.innerHTML=`<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;background:rgba(129,140,248,.15);border:1px solid rgba(129,140,248,.3);font-size:11px;color:#818CF8">☁️ Running on server</span>`;
       }
+      const logPanel = document.getElementById('log-panel');
       if (logPanel) logPanel.style.display='flex';
-      // Start polling logs
       window._srvLogSince = 0;
       window._serverLogInterval = setInterval(()=>pollServerLogs(botId), 2000);
+    } else {
+      if (btn) { btn.textContent='▶ Run Bot'; btn.disabled=false; btn.style.cssText='background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35);min-width:110px'; }
     }
-  } catch(_) {}
+  } catch(_) {
+    if (btn) { btn.textContent='▶ Run Bot'; btn.disabled=false; btn.style.cssText='background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35);min-width:110px'; }
+  }
 }
 function showSQL(){
   const sql=`-- Supabase SQL Editor → New query → Вставьте и выполните:
@@ -2884,14 +2889,33 @@ class BotEngine {
       if (!r.ok) {
         const desc = r.description || '';
         if (desc.includes('409') || desc.includes('Conflict')) {
-          this.addLog('⚠ 409: Bot already running elsewhere. Stopping browser mode.', 'err');
+          this.addLog('⚠ 409: Bot already running. Checking server...', 'err');
           this.stop();
-          const btn = document.getElementById('btn-run');
-          if (btn) { btn.textContent='▶ Run Bot'; btn.style.cssText='background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35);min-width:110px'; btn.disabled=false; }
-          const st = document.getElementById('bot-status');
-          if (st) st.style.display='none';
-          // Auto-check if bot is running on server
-          if (S.cBot?.id) setTimeout(()=>checkServerStatus(S.cBot.id), 500);
+          const btn2 = document.getElementById('btn-run');
+          if (btn2) { btn2.textContent='⏳ Checking...'; btn2.disabled=true; }
+          // Wait for server to wake up (Render free tier sleeps)
+          const botId = S.cBot?.id;
+          const cfg = getServerCfg(botId);
+          if (cfg.url && cfg.key) {
+            // Try up to 30 seconds for server to wake up
+            let found = false;
+            for (let i=0; i<6; i++) {
+              await new Promise(r=>setTimeout(r, 5000));
+              try {
+                const r = await fetch(cfg.url+'/api/status/'+botId, {headers:{'x-server-key':cfg.key}, signal:AbortSignal.timeout(8000)});
+                const d = await r.json();
+                if (d.running) { found=true; break; }
+              } catch(_) {}
+              this.addLog('⏳ Waiting for server... ('+(i+1)+'/6)', 'sys');
+            }
+            if (found) {
+              await checkServerStatus(botId);
+              return;
+            }
+          }
+          if (btn2) { btn2.textContent='▶ Run Bot'; btn2.disabled=false; btn2.style.cssText='background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35);min-width:110px'; }
+          const st2 = document.getElementById('bot-status');
+          if (st2) st2.style.display='none';
           return;
         }
       } else if (r.result?.length) {
