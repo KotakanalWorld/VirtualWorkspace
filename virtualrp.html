@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universe Craft Preview - Big Patch</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        .overlay-patch {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            
+            /* Увеличенные размеры */
+            width: 250px;  /* Было 180px */
+            height: 60px;  /* Было 45px */
+            
+            /* Твой цвет */
+            background-color: rgb(11 29 54);
+            
+            /* Поднимаем над всеми элементами */
+            z-index: 999999;
+
+            /* Если хочешь сделать углы острыми, удали строку ниже */
+            border-radius: 10px 0 0 0; 
+            
+            /* Запрещаем взаимодействие, чтобы не мешало кликать */
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <iframe src="https://universe-craft-7.preview.emergentagent.com"></iframe>
+
+    <div class="overlay-patch"></div>
+
+</body>
+</html>
