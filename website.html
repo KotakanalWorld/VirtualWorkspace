@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universe Craft Preview - Big Patch</title>
+    <title>Virtual Workspace</title>
+    <link rel="icon" type="image/png" href="workspace.png">
     <style>
         body, html {
             margin: 0;
@@ -12,14 +13,12 @@
             width: 100%;
             overflow: hidden;
         }
-
         iframe {
             width: 100%;
             height: 100%;
             border: none;
             display: block;
         }
-
         .overlay-patch {
             position: fixed;
             bottom: 0;
@@ -34,7 +33,6 @@
             
             /* Поднимаем над всеми элементами */
             z-index: 999999;
-
             /* Если хочешь сделать углы острыми, удали строку ниже */
             border-radius: 10px 0 0 0; 
             
@@ -44,10 +42,7 @@
     </style>
 </head>
 <body>
-
     <iframe src="https://web-designer-tool-1.preview.emergentagent.com"></iframe>
-
     <div class="overlay-patch"></div>
-
 </body>
 </html>
