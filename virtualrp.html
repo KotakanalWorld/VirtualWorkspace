@@ -1,14 +1,10 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <div style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #1a1a1a; color: white; font-family: sans-serif;">
-    <img src="workspace.png" style="height: 30px;">
-    <span style="font-size: 18px; font-weight: bold;">Virtual Workspace</span>
-    </div>
-    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universe Craft Preview - Big Patch</title>
+    <title>Virtual Workspace</title>
+    <link rel="icon" type="image/png" href="workspace.png">
     <style>
         body, html {
             margin: 0;
@@ -17,14 +13,12 @@
             width: 100%;
             overflow: hidden;
         }
-
         iframe {
             width: 100%;
             height: 100%;
             border: none;
             display: block;
         }
-
         .overlay-patch {
             position: fixed;
             bottom: 0;
@@ -39,7 +33,6 @@
             
             /* Поднимаем над всеми элементами */
             z-index: 999999;
-
             /* Если хочешь сделать углы острыми, удали строку ниже */
             border-radius: 10px 0 0 0; 
             
@@ -49,10 +42,7 @@
     </style>
 </head>
 <body>
-
     <iframe src="https://universe-craft-7.preview.emergentagent.com"></iframe>
-
     <div class="overlay-patch"></div>
-
 </body>
 </html>
