@@ -1790,7 +1790,7 @@ function buildCfg(b,def){
     case'forward':
       f=fi('Destination chat ID','text','to',c.to||'','-100123456789',id);break;
     case'del_msg':
-      f=fs('Which message','target',c.target||'last',[['last','Последнее отправленное botом'],['user','User message'],['id','By specific ID']],id)
+      f=fs('Which message','target',c.target||'last',[['last','Last sent by bot'],['user','User message'],['bot_last','Last bot message in chat'],['id','By specific ID']],id)
        +(c.target==='id'?fi('Message ID','text','msg_id',c.msg_id||'','123456',id):'');break;
     case'pin_msg':
       f=fs('Which message','target',c.target||'last',[['last','Последнее отправленное botом'],['user','User message'],['id','By specific ID']],id)
@@ -2816,6 +2816,7 @@ class BotEngine {
     this.floodCD  = new Map();   // `uid:cid` → last fired ms
     this.geminiCtx= new Map();   // `uid:cid:session` → [{role,parts:[{text}]}]
     this.gptCtx   = new Map();   // `uid:cid:session` → [{role,content}]
+    this.lastBotMsgId = 0;       // last message sent by bot (for del_msg target:bot_last)
     // Init global vars from definitions
     for (const v of botVars) {
       if (v.type==='global' && v.name) this.gVars[v.name] = v.initial ?? '0';
@@ -3047,7 +3048,9 @@ class BotEngine {
         case 'cmd': { const cmd='/'+( t.config?.cmd||''); if ((msg.text===cmd||msg.text?.startsWith(cmd+' '))&&await this.checkConds(msg.chat?.id,t.config?.conditions,msg)) return flow; break; }
         case 'on_text': {
           const txt = msg.text||'';
-          if (msg.from?.is_bot && !t.config?.allow_bots) break;
+          const isBot = !!(msg.from?.is_bot);
+          if (isBot && !t.config?.allow_bots) break;
+          if (isBot) this.addLog('🤖 Bot message received, processing...','sys');
           const patterns = t.config?.patterns || [{match:t.config?.match||'', mode:t.config?.mode||'contains'}];
           const hit = patterns.some(p => {
             const m=p.match||'', mode=p.mode||'contains';
@@ -3083,10 +3086,8 @@ class BotEngine {
   async run(chatId, msg, flow, flows) {
     const blocks=flow.blocks||[], ctx=this.ctx(chatId,msg);
     let lastId=msg.message_id;
-    this.addLog('🔧 run: '+flow.name+' — '+blocks.length+' blocks, executing '+(blocks.length-1)+' actions', 'sys');
     for (let i=1;i<blocks.length;i++) {
-      this.addLog('🔧 exec block['+i+']: '+blocks[i].type, 'sys');
-      const res=await this.exec(chatId,msg,blocks[i],ctx,lastId,flows).catch(e=>{this.addLog('⚠ exec error: '+e.message,'err'); return null;});
+      const res=await this.exec(chatId,msg,blocks[i],ctx,lastId,flows).catch(e=>{this.addLog('⚠ ['+blocks[i].type+']: '+e.message,'err'); return null;});
       if (res?.msgId) lastId=res.msgId;
       if (res?.stop) break;
       if (res?.jump) { const t=flows.find(f=>f.id===res.jump); if(t) await this.run(chatId,msg,t,flows); break; }
@@ -3106,6 +3107,7 @@ class BotEngine {
           if(kb) p.reply_markup={inline_keyboard:kb};
           const r=await this.tg('sendMessage',p);
           this.addLog('✉ Sent:: '+sub(c.text||'').substring(0,40)+(kb?' + кнопки':''), 'out');
+          if(r.result?.message_id) this.lastBotMsgId = r.result.message_id;
           return {msgId:r.result?.message_id};
         }
         case 'send_admin': {
@@ -3163,9 +3165,20 @@ class BotEngine {
           break;
         case 'del_msg': {
           const target=c.target||'last';
-          const delId=target==='user'?msg.message_id:target==='id'?parseInt(c.msg_id):lastId;
-          if(delId) await this.tg('deleteMessage',{chat_id:chatId,message_id:delId});
-          this.addLog('🗑 Message deleted','out'); break;
+          let delId;
+          if(target==='user') delId=msg.message_id;
+          else if(target==='id') delId=parseInt(c.msg_id);
+          else if(target==='bot_last') delId=this.lastBotMsgId;
+          else delId=lastId; // 'last' = last sent by bot in this flow
+          this.addLog('🗑 del_msg: target='+target+' id='+delId,'sys');
+          if(delId) {
+            const r=await this.tg('deleteMessage',{chat_id:chatId,message_id:delId});
+            if(r.ok) this.addLog('🗑 Message deleted (id:'+delId+')','out');
+            else this.addLog('⚠ Delete failed: '+r.description,'err');
+          } else {
+            this.addLog('⚠ del_msg: no message ID to delete','err');
+          }
+          break;
         }
         case 'forward':
           await this.tg('forwardMessage',{chat_id:c.to||chatId,from_chat_id:chatId,message_id:lastId});
@@ -3857,14 +3870,6 @@ async function toggleBot() {
   }
 
   // ── BROWSER MODE ─────────────────────────────────────────────────────────
-  // If server is configured → NEVER use browser, always redirect to server
-  if (!useServer) {
-    const anyCfg = getServerCfg(S.cBot?.id);
-    if (anyCfg.url && anyCfg.key) {
-      // Has server config but somehow bypassed — force server mode
-      window.location.reload(); return;
-    }
-  }
 
   if (engine && engine.running) {
     engine.stop(); engine = null;
