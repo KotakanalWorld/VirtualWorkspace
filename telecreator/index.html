@@ -177,7 +177,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);cursor:point
           <p style="color:var(--muted);font-size:13px;margin-top:2px" id="bots-cnt">0 bots</p>
         </div>
         <div class="flex-1"></div>
-        <button class="btn btn-primary" id="btn-add-bot">+ Add bots</button>
+        <button class="btn btn-primary" id="btn-add-bot">+ Add Bot</button>
+        <button class="btn btn-ghost" id="btn-add-code-bot" style="border-color:rgba(167,139,250,.4);color:#A78BFA" title="Create a bot with pure code">⚡ Code Bot</button>
       </div>
       <div id="bots-list"></div>
     </div>
@@ -199,6 +200,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);cursor:point
     </div>
     <button class="btn btn-ghost btn-sm" id="btn-code" style="font-family:var(--mono);letter-spacing:-.3px">{ } Code</button>
     <button class="btn btn-ghost btn-sm" id="btn-server" style="border-color:rgba(99,102,241,.4);color:#818CF8" title="Connect Render.com server for 24/7 hosting">☁️ Server</button>
+    <button class="btn btn-ghost btn-sm" id="btn-import" title="Import flows from ZIP or TXT">📥 Import</button>
+    <button class="btn btn-ghost btn-sm" id="btn-export" title="Export flows as ZIP">📤 Export</button>
     <button class="btn btn-sm" id="btn-run" style="background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35);min-width:110px">▶ Run Bot</button>
     <button class="btn btn-primary btn-sm" id="btn-save" style="min-width:110px">💾 Save</button>
   </header>
@@ -251,6 +254,37 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);cursor:point
     <code class="mono" style="color:var(--pri)">bots</code>
     <code class="mono" style="color:var(--pri)">flows</code>
     — click «SQL Setup» for instructions
+  </div>
+</div>
+
+<!-- CODE BOT EDITOR SCREEN -->
+<div id="codeedit-screen" class="screen">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--bord);height:52px">
+    <button class="btn btn-ghost btn-sm" id="codedit-back">← Dashboard</button>
+    <div style="font-size:14px;font-weight:600;color:var(--hi);flex:1" id="codedit-botname">Code Bot</div>
+    <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.3);color:#A78BFA">⚡ Code Mode</span>
+    <button class="btn btn-ghost btn-sm" id="codedit-server-btn" style="border-color:rgba(99,102,241,.4);color:#818CF8">☁️ Server</button>
+    <button class="btn btn-sm" id="codedit-run" style="background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35)">▶ Deploy</button>
+    <button class="btn btn-primary btn-sm" id="codedit-save">💾 Save</button>
+  </div>
+  <div style="display:flex;height:calc(100vh - 52px)">
+    <!-- Code editor -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div style="padding:8px 12px;background:var(--surf);border-bottom:1px solid var(--bord);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px">
+        <span>📄 bot.js</span>
+        <span style="flex:1"></span>
+        <span id="codedit-status" style="font-size:11px"></span>
+      </div>
+      <textarea id="codedit-textarea" spellcheck="false" style="flex:1;width:100%;background:#0B1421;color:#A8D8EA;font-family:var(--mono);font-size:13px;line-height:1.7;padding:16px;border:none;outline:none;resize:none;tab-size:2"></textarea>
+    </div>
+    <!-- Log panel -->
+    <div id="codedit-logs" style="width:320px;display:flex;flex-direction:column;border-left:1px solid var(--bord)">
+      <div style="padding:8px 12px;background:var(--surf);border-bottom:1px solid var(--bord);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:8px">
+        <span>📋 Logs</span>
+        <button onclick="document.getElementById('codedit-log-msgs').innerHTML=''" style="margin-left:auto;font-size:10px;cursor:pointer;background:var(--bord);border:none;border-radius:4px;padding:2px 6px;color:var(--muted)">Clear</button>
+      </div>
+      <div id="codedit-log-msgs" style="flex:1;overflow-y:auto;padding:8px;font-family:var(--mono);font-size:11px;line-height:1.6"></div>
+    </div>
   </div>
 </div>
 
@@ -477,7 +511,283 @@ async function doAuth(){
 /* ─────────────────────────────────────────────
    DASHBOARD
 ───────────────────────────────────────────── */
-// ── Server connection (Render.com) ──────────────────────────────────────────
+// ── Import / Export flows ────────────────────────────────────────────────────
+
+async function exportFlows() {
+  if (!S.cBot) { alert('Select a bot first'); return; }
+  try {
+    await saveFlow();
+    const flows = S.flows.filter(f => f.name !== '__variables__');
+    if (!flows.length) { alert('No flows to export'); return; }
+
+    const data = {
+      bot: S.cBot.name,
+      exported: new Date().toISOString(),
+      flows: flows.map(f => {
+        const flow = f.id === S.cFlow?.id ? {...f, blocks: S.blocks} : f;
+        let code = '';
+        try { code = buildFlowCode(flow); } catch(e) { code = '// Error: '+e.message; }
+        return { name: flow.name, code };
+      })
+    };
+
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (S.cBot.name||'bot').replace(/[^a-zA-Z0-9_]/g,'_') + '_flows.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    alert('Export error: ' + e.message);
+    console.error('Export error:', e);
+  }
+}
+
+async function importFlows() {
+  if (!S.cBot) { alert('Select a bot first'); return; }
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,.txt';
+  input.multiple = true;
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.onchange = async (e) => {
+    document.body.removeChild(input);
+    const files = [...e.target.files];
+    if (!files.length) return;
+
+    const newFlows = [];
+
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        if (file.name.endsWith('.json')) {
+          const data = JSON.parse(text);
+          const list = data.flows || (Array.isArray(data) ? data : []);
+          for (const f of list) {
+            if (f.code) {
+              try {
+                const blocks = codeToBlocks(f.code);
+                if (blocks.length) newFlows.push({name: f.name || 'Imported flow', blocks});
+              } catch(_) {}
+            }
+          }
+        } else if (file.name.endsWith('.txt')) {
+          const blocks = codeToBlocks(text);
+          if (blocks.length) newFlows.push({name: file.name.replace('.txt',''), blocks});
+        }
+      } catch(e) {
+        console.error('Parse error for', file.name, e);
+      }
+    }
+
+    if (!newFlows.length) { alert('No valid flows found. Make sure files were exported from Telebot Creator.'); return; }
+
+    // Show import modal
+    const replace = await showImportModal(newFlows.map(f=>f.name));
+    if (replace === null) return; // cancelled
+
+    let saved = 0;
+
+    // Delete existing flows if replace mode
+    if (replace === true) {
+      const existing = S.flows.filter(f => f.name !== '__variables__');
+      for (const f of existing) {
+        try { await DB.del('flows', f.id, S.sess.token); } catch(e) {}
+      }
+      S.flows = S.flows.filter(f => f.name === '__variables__');
+      S.blocks = []; S.cFlow = null;
+    }
+    for (const flow of newFlows) {
+      try {
+        const res = await DB.post('flows', {
+          name: flow.name,
+          blocks: flow.blocks,
+          user_id: S.sess.user.id,
+          bot_id: S.cBot.id
+        }, S.sess.token);
+        if (res?.[0]) { S.flows.push(res[0]); saved++; }
+      } catch(e) { console.error('Save error:', e); }
+    }
+
+    renderFlows();
+    if (saved) alert('✅ Imported ' + saved + ' flow(s)!');
+    else alert('❌ Failed to save flows. Check console for errors.');
+  };
+
+  input.click();
+}
+
+function showImportModal(flowNames) {
+  return new Promise(resolve => {
+    openMod(`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <h3 style="flex:1">📥 Import Flows</h3>
+        <button class="icon-btn" onclick="closeMod();window._importResolve(null)">✕</button>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Found <b style="color:var(--txt)">${flowNames.length} flow(s)</b> to import:</div>
+      <div style="background:var(--surf);border:1px solid var(--bord);border-radius:8px;padding:10px;margin-bottom:16px;max-height:180px;overflow-y:auto">
+        ${flowNames.map(n=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--bord)">${esc(n)}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" style="flex:1;color:var(--red)" onclick="closeMod();window._importResolve(true)">🔄 Replace all flows</button>
+        <button class="btn btn-primary" style="flex:1" onclick="closeMod();window._importResolve(false)">➕ Add to existing</button>
+      </div>
+      <div style="margin-top:8px">
+        <button class="btn btn-ghost" style="width:100%" onclick="closeMod();window._importResolve(null)">Cancel</button>
+      </div>
+    `);
+    window._importResolve = resolve;
+  });
+}
+function loadJSZip() {
+  return new Promise((resolve, reject) => {
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+// ── Code Bot Editor ──────────────────────────────────────────────────────────
+
+const CODE_BOT_DEFAULT = `// Available: bot, setVar(chatId,k,v), getVar(chatId,k), sleep, fetch, log
+
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text || '';
+
+  if (text === '/start') {
+    await bot.sendMessage(chatId, '👋 Hello!');
+  }
+});
+
+bot.on('callback_query', async (q) => {
+  await bot.answerCallbackQuery(q.id);
+  // handle buttons
+});
+
+bot.on('pre_checkout_query', async (q) => {
+  await bot.answerPreCheckoutQuery(q.id, true);
+});
+
+log('🚀 Bot started!');`;
+
+async function openCodeBot(botId) {
+  S.cBot = S.bots.find(b => b.id === botId);
+  if (!S.cBot) return;
+  document.getElementById('codedit-botname').textContent = S.cBot.name;
+  let code = CODE_BOT_DEFAULT;
+  try {
+    const flows = await DB.get('flows', S.sess.token, '?bot_id=eq.'+botId+'&name=eq.__code__&select=*');
+    if (flows?.[0]?.blocks?.[0]?.config?.code) {
+      code = flows[0].blocks[0].config.code;
+      S._codeBotFlowId = flows[0].id;
+    } else { S._codeBotFlowId = null; }
+  } catch(e) {}
+  document.getElementById('codedit-textarea').value = code;
+  document.getElementById('codedit-status').textContent = '';
+  document.getElementById('codedit-log-msgs').innerHTML = '';
+  document.getElementById('codedit-textarea').onkeydown = (e) => {
+    if (e.key==='Tab'){e.preventDefault();const t=e.target,s=t.selectionStart;t.value=t.value.substring(0,s)+'  '+t.value.substring(t.selectionEnd);t.selectionStart=t.selectionEnd=s+2;}
+  };
+  go('codeedit');
+  updateCodeServerBtn();
+  setTimeout(()=>checkCodeServerStatus(botId),500);
+}
+
+async function saveCodeBot() {
+  const code = document.getElementById('codedit-textarea')?.value;
+  const st = document.getElementById('codedit-status');
+  st.innerHTML = '<span style="color:var(--muted)">💾 Saving...</span>';
+  try {
+    const blocks = [{id:'c1',type:'custom_script',config:{code}}];
+    if (S._codeBotFlowId) {
+      await DB.patch('flows', S._codeBotFlowId, {blocks}, S.sess.token);
+    } else {
+      const res = await DB.post('flows', {name:'__code__',blocks,user_id:S.sess.user.id,bot_id:S.cBot.id}, S.sess.token);
+      if (res?.[0]) S._codeBotFlowId = res[0].id;
+    }
+    st.innerHTML = '<span style="color:var(--green)">✅ Saved</span>';
+    setTimeout(()=>st.innerHTML='',2000);
+  } catch(e) { st.innerHTML='<span style="color:var(--red)">❌ '+e.message+'</span>'; }
+}
+
+async function deployCodeBot() {
+  const code = document.getElementById('codedit-textarea')?.value;
+  const cfg = getServerCfg(S.cBot?.id);
+  const st = document.getElementById('codedit-status');
+  if (!cfg.url||!cfg.key){alert('Connect a server first (☁️ Server button)');return;}
+  await saveCodeBot();
+  // Clear logs on redeploy
+  const logEl = document.getElementById('codedit-log-msgs');
+  if (logEl) logEl.innerHTML = '';
+  window._codeLogSince = 0;
+  st.innerHTML = '<span style="color:var(--muted)">⏳ Deploying...</span>';
+  try {
+    const res = await fetch(cfg.url+'/api/start',{method:'POST',headers:{'Content-Type':'application/json','x-server-key':cfg.key},body:JSON.stringify({botId:S.cBot.id,token:S.cBot.token,mode:'code',code})});
+    const data = await res.json();
+    if (data.ok) {
+      st.innerHTML = '<span style="color:var(--green)">✅ Running!</span>';
+      const btn=document.getElementById('codedit-run');
+      btn.textContent='⏹ Stop';btn.style.cssText='background:rgba(248,113,113,.15);color:#F87171;border:1px solid rgba(248,113,113,.35)';
+      btn.onclick=stopCodeBot;
+      window._codeLogSince=0;clearInterval(window._codeLogInterval);
+      window._codeLogInterval=setInterval(()=>pollCodeLogs(S.cBot.id),2000);
+    } else { st.innerHTML='<span style="color:var(--red)">❌ '+(data.error||'Failed')+'</span>'; }
+  } catch(e){st.innerHTML='<span style="color:var(--red)">❌ '+e.message+'</span>';}
+}
+
+async function stopCodeBot() {
+  const cfg=getServerCfg(S.cBot?.id);
+  clearInterval(window._codeLogInterval);
+  if(cfg.url&&cfg.key) try{await fetch(cfg.url+'/api/stop',{method:'POST',headers:{'Content-Type':'application/json','x-server-key':cfg.key},body:JSON.stringify({botId:S.cBot.id})});}catch(_){}
+  const btn=document.getElementById('codedit-run');
+  if(btn){btn.textContent='▶ Deploy';btn.style.cssText='background:rgba(52,211,153,.15);color:#34D399;border:1px solid rgba(52,211,153,.35)';btn.onclick=deployCodeBot;}
+  document.getElementById('codedit-status').innerHTML='';
+}
+
+async function pollCodeLogs(botId) {
+  const cfg=getServerCfg(botId);if(!cfg.url||!cfg.key)return;
+  try{
+    const res=await fetch(cfg.url+'/api/logs/'+botId+'?since='+(window._codeLogSince||0),{headers:{'x-server-key':cfg.key},signal:AbortSignal.timeout(5000)});
+    const data=await res.json();
+    if(data.logs?.length){
+      window._codeLogSince=data.logs[data.logs.length-1].ts;
+      const el=document.getElementById('codedit-log-msgs');if(!el)return;
+      const colors={sys:'#7A9AB8',in:'#34D399',out:'#4DA9E8',err:'#F87171'};
+      for(const l of data.logs){const d=document.createElement('div');d.style.color=colors[l.type]||'#7A9AB8';d.style.padding='2px 0';d.style.borderBottom='1px solid rgba(255,255,255,.04)';d.textContent=l.time+' '+l.text;el.appendChild(d);}
+      el.scrollTop=el.scrollHeight;
+    }
+  }catch(_){}
+}
+
+function updateCodeServerBtn() {
+  const cfg=getServerCfg(S.cBot?.id);
+  const btn=document.getElementById('codedit-server-btn');if(!btn)return;
+  btn.style.borderColor=cfg.url&&cfg.key?'rgba(52,211,153,.4)':'rgba(99,102,241,.4)';
+  btn.style.color=cfg.url&&cfg.key?'#34D399':'#818CF8';
+}
+
+async function checkCodeServerStatus(botId) {
+  const cfg=getServerCfg(botId);if(!cfg.url||!cfg.key)return;
+  try{
+    const res=await fetch(cfg.url+'/api/status/'+botId,{headers:{'x-server-key':cfg.key},signal:AbortSignal.timeout(8000)});
+    const data=await res.json();
+    if(data.running){
+      const btn=document.getElementById('codedit-run');
+      if(btn){btn.textContent='⏹ Stop';btn.style.cssText='background:rgba(248,113,113,.15);color:#F87171;border:1px solid rgba(248,113,113,.35)';btn.onclick=stopCodeBot;}
+      document.getElementById('codedit-status').innerHTML='<span style="color:#818CF8">☁️ Running</span>';
+      window._codeLogSince=0;clearInterval(window._codeLogInterval);
+      window._codeLogInterval=setInterval(()=>pollCodeLogs(botId),2000);
+    }
+  }catch(_){}
+}
+
 function getServerCfg(botId) {
   const id = botId || S.cBot?.id;
   if (!id) return {};
@@ -1147,9 +1457,73 @@ async function checkBotCardStatus(botId, cfg) {
     txt.textContent = '☁️ Offline';
   }
 }
+function showAddCodeBot() {
+  const lastUrl = S.bots.length ? getServerCfg(S.bots[0].id).url||'' : '';
+  const lastKey = S.bots.length ? getServerCfg(S.bots[0].id).key||'' : '';
+  openMod(`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <h3 style="flex:1">⚡ New Code Bot</h3>
+      <button class="icon-btn" onclick="closeMod()">✕</button>
+    </div>
+    <div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:var(--muted)">
+      Write your bot in pure JavaScript. No blocks — full control. Requires server.
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="fl">Bot Name</label>
+      <input type="text" id="cbot-name" placeholder="My Code Bot" autofocus>
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="fl">Bot Token (from @BotFather)</label>
+      <input type="text" id="cbot-token" placeholder="123456789:AAF..." class="mono" style="font-size:11px">
+    </div>
+    <div style="margin-bottom:10px">
+      <label class="fl">Server URL</label>
+      <input type="text" id="cbot-url" placeholder="https://my-server.onrender.com" value="${lastUrl}">
+    </div>
+    <div style="margin-bottom:16px">
+      <label class="fl">Server Key</label>
+      <input type="text" id="cbot-key" placeholder="my-secret-key" value="${lastKey}">
+    </div>
+    <div id="cbot-status" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeMod()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1;background:rgba(167,139,250,.2);border-color:rgba(167,139,250,.4);color:#A78BFA" onclick="createCodeBot()">⚡ Create</button>
+    </div>
+  `);
+}
+
+async function createCodeBot() {
+  const name  = document.getElementById('cbot-name')?.value.trim();
+  const token = document.getElementById('cbot-token')?.value.trim();
+  const url   = document.getElementById('cbot-url')?.value.trim();
+  const key   = document.getElementById('cbot-key')?.value.trim();
+  const st    = document.getElementById('cbot-status');
+
+  if (!name)  { st.innerHTML='<span style="color:var(--red)">Enter bot name</span>'; return; }
+  if (!token) { st.innerHTML='<span style="color:var(--red)">Enter bot token</span>'; return; }
+  if (!url)   { st.innerHTML='<span style="color:var(--red)">Enter server URL</span>'; return; }
+  if (!key)   { st.innerHTML='<span style="color:var(--red)">Enter server key</span>'; return; }
+
+  st.innerHTML='<span style="color:var(--muted)">⏳ Creating bot...</span>';
+
+  try {
+    const bots = await DB.post('bots', {name, token, user_id:S.sess.user.id}, S.sess.token);
+    if (!bots?.[0]) throw new Error('Failed to create bot');
+    const bot = bots[0];
+    S.bots.push(bot);
+    setServerCfg({url, key}, bot.id);
+    // Mark as code bot
+    localStorage.setItem('tc_codebot_'+bot.id, '1');
+    closeMod();
+    renderBots();
+    openCodeBot(bot.id);
+  } catch(e) {
+    st.innerHTML='<span style="color:var(--red)">❌ '+e.message+'</span>';
+  }
+}
+
 function showAddBot(){
   openMod(`
-    <h3 style="margin-bottom:6px">Add Bot</h3>
     <p style="color:var(--muted);font-size:13px;margin-bottom:12px">Get your token from <a href="https://t.me/BotFather" target="_blank" style="color:var(--pri)">@BotFather</a> → /newbot</p>
     <div style="background:rgba(77,169,232,.08);border:1px solid rgba(77,169,232,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:11px;line-height:1.9;color:var(--muted)">
       <b style="color:var(--txt)">⚙️ Required BotFather settings:</b><br>
@@ -1210,9 +1584,11 @@ function openBot(id){
   if (lm) lm.innerHTML='';
   // Switch bot
   S.cBot=S.bots.find(b=>b.id===id);
+  // Check if code bot (via localStorage flag)
+  const isCodeBot = localStorage.getItem('tc_codebot_'+id) === '1';
+  if (isCodeBot) { openCodeBot(id); return; }
   goEditor();
   updateServerBtn();
-  // Check if bot is already running on server
   setTimeout(()=>checkServerStatus(id), 500);
 }
 
@@ -4248,6 +4624,11 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // Dashboard
   document.getElementById('btn-add-bot').onclick=showAddBot;
+  document.getElementById('btn-add-code-bot').onclick=showAddCodeBot;
+  document.getElementById('codedit-back').onclick=()=>{clearInterval(window._codeLogInterval);goDash();};
+  document.getElementById('codedit-save').onclick=saveCodeBot;
+  document.getElementById('codedit-run').onclick=deployCodeBot;
+  document.getElementById('codedit-server-btn').onclick=()=>showServerModal();
   document.getElementById('btn-plans').onclick=showPlans;
   document.getElementById('btn-redeem').onclick=showRedeem;
   document.getElementById('btn-admin').onclick=showAdminPanel;
@@ -4263,6 +4644,8 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btn-back').onclick=()=>{
     if(engine&&engine.running){engine.stop();engine=null;}
     S.cBot=null;S.flows=[];S.blocks=[];S.cFlow=null;S.selId=null;go('dashboard')};
+  document.getElementById('btn-import').onclick=importFlows;
+  document.getElementById('btn-export').onclick=exportFlows;
   document.getElementById('btn-server').onclick=showServerModal;
   document.getElementById('btn-save').onclick=saveFlow;
   updateServerBtn();
