@@ -1567,7 +1567,7 @@ async function delBot(id){
   try{await DB.del('bots',id,S.sess.token);S.bots=S.bots.filter(b=>b.id!==id);renderBots()}
   catch(e){alert('Error: '+e.message)}
 }
-function openBot(id){
+async function openBot(id){
   // Stop browser engine if running
   if (engine && engine.running) { engine.stop(); engine = null; }
   // Stop server log polling
@@ -1584,9 +1584,8 @@ function openBot(id){
   if (lm) lm.innerHTML='';
   // Switch bot
   S.cBot=S.bots.find(b=>b.id===id);
-  // Check if code bot (via localStorage flag)
-  const isCodeBot = localStorage.getItem('tc_codebot_'+id) === '1';
-  if (isCodeBot) { openCodeBot(id); return; }
+  // Check if code bot — ONLY via localStorage flag
+  if (localStorage.getItem('tc_codebot_'+id) === '1') { openCodeBot(id); return; }
   goEditor();
   updateServerBtn();
   setTimeout(()=>checkServerStatus(id), 500);
