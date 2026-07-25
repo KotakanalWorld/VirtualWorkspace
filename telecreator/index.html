@@ -178,7 +178,6 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);cursor:point
         </div>
         <div class="flex-1"></div>
         <button class="btn btn-primary" id="btn-add-bot">+ Add Bot</button>
-        <button class="btn btn-ghost" id="btn-add-code-bot" style="border-color:rgba(167,139,250,.4);color:#A78BFA" title="Create a bot with pure code">⚡ Code Bot</button>
       </div>
       <div id="bots-list"></div>
     </div>
@@ -349,7 +348,7 @@ const Auth={
   out:(t)=>api('/auth/v1/logout',{method:'POST'},t),
 };
 const DB={
-  get:(t,tk,q='')=>api('/rest/v1/'+t+'?select=*'+q,{},tk),
+  get:(t,tk,q='')=>api('/rest/v1/'+t+(q.startsWith('?')?q:'?select=*'+q),{},tk),
   post:(t,d,tk)=>api('/rest/v1/'+t,{method:'POST',body:JSON.stringify(d)},tk),
   patch:(t,id,d,tk)=>api('/rest/v1/'+t+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify(d)},tk),
   del:(t,id,tk)=>api('/rest/v1/'+t+'?id=eq.'+id,{method:'DELETE'},tk),
@@ -1503,6 +1502,13 @@ async function createCodeBot() {
   if (!token) { st.innerHTML='<span style="color:var(--red)">Enter bot token</span>'; return; }
   if (!url)   { st.innerHTML='<span style="color:var(--red)">Enter server URL</span>'; return; }
   if (!key)   { st.innerHTML='<span style="color:var(--red)">Enter server key</span>'; return; }
+
+  // Check for duplicate bot name
+  const dup = S.bots.find(b => b.name === name);
+  if (dup) {
+    const open = confirm('A bot named "'+name+'" already exists. Open it instead of creating a new one?');
+    if (open) { closeMod(); openBot(dup.id); return; }
+  }
 
   st.innerHTML='<span style="color:var(--muted)">⏳ Creating bot...</span>';
 
@@ -2661,7 +2667,8 @@ function buildFlowCode(flow) {
         const o = [];
         if (c.parse_mode) o.push("parse_mode:'" + c.parse_mode + "'");
         if (c.no_preview) o.push('disable_web_page_preview:true');
-        if (k) o.push('reply_markup:{inline_keyboard:' + k + '}');
+        const kbCode = genKbCode(c.buttons);
+        if (kbCode && kbCode !== '[]') o.push('reply_markup:{inline_keyboard:' + kbCode + '}');
         lines.push("await bot.sendMessage(chatId, sub(chatId,'" + e(c.text||'') + "')" + (o.length ? ',{'+o.join(',')+'}'  : '') + ');');
         break;
       }
@@ -4623,7 +4630,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   // Dashboard
   document.getElementById('btn-add-bot').onclick=showAddBot;
-  document.getElementById('btn-add-code-bot').onclick=showAddCodeBot;
   document.getElementById('codedit-back').onclick=()=>{clearInterval(window._codeLogInterval);goDash();};
   document.getElementById('codedit-save').onclick=saveCodeBot;
   document.getElementById('codedit-run').onclick=deployCodeBot;
